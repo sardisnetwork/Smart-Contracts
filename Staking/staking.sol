@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.16;
+pragma solidity 0.8.17;
 
 /**
  * @dev Contract module that helps prevent reentrant calls to a function.
@@ -95,6 +95,16 @@ contract ownable {
     }
 }
 
+interface IValidators {
+    function getValidatorInfo(address val) external view returns ( address payable,
+            uint,
+            uint256,
+            uint256,
+            uint256,
+            uint256,
+            address[] memory);
+}
+
 contract Staking is ownable, ReentrancyGuard  {
 
 
@@ -103,6 +113,8 @@ contract Staking is ownable, ReentrancyGuard  {
 
     event WithdrawRewards(address indexed user,uint256 indexed amount);
     event EvDepositRewards(address indexed user,uint256 indexed amount);
+    IValidators validatorcontract;
+
 
     /*=====================================
     =       CUSTOM PUBLIC FUNCTIONS       =
@@ -123,23 +135,29 @@ contract Staking is ownable, ReentrancyGuard  {
     }
     uint256 public OwnerDeposit;
     uint256 public rewardrate = 2000; //20%
-    uint public constant RewardInterval = 365 days;
+    uint public constant RewardInterval = 365;//365 days;
     mapping(address=>stake) public details;
+    mapping(address=>bool) public validatorStatus;
+    uint[8] public validatorRewRate = [250,200,180,160,110,90,75,50];
+
 
     uint256 public totalStake ;
 
 
     function stakeAmount() payable public  nonReentrant  returns(bool){
+        address msgsender= msg.sender;
+        (,uint status,uint256 coin,,,,) = validatorcontract.getValidatorInfo(msgsender);      
+        require(!validatorStatus[msgsender] && coin ==0 && status==0,"Validators cannot stake here");
         uint256 _amount =msg.value;
         require(_amount>0,"Invalid Amount");
-        if(details[msg.sender].amount > 0)
+        if(details[msgsender].amount > 0)
         {
           _withdrawReward();
         }
-        details[msg.sender].amount += _amount;
-        details[msg.sender].LastReward_time = block.timestamp;
+        details[msgsender].amount += _amount;
+        details[msgsender].LastReward_time = block.timestamp;
         totalStake  += _amount;
-        emit Stake(msg.sender, _amount);
+        emit Stake(msgsender, _amount);
 
         return true;
 
@@ -157,10 +175,56 @@ contract Staking is ownable, ReentrancyGuard  {
         emit Unstake(msg.sender, _amount);
         return true;
     }
-
+    
     function checkRewards(address _add) public view returns(uint256)
     {
+        (,uint status,uint256 coin,,,,) = validatorcontract.getValidatorInfo(_add);
+        if(validatorStatus[_add] && coin >0 && status>0)
+        {   
+            uint256 _amount ;
+            if(coin >= 1e6 * 1e18)
+            {
+                _amount = coin + (coin * validatorRewRate[0] /100) ;
+            }
+            else if(coin >= 5e5 * 1e18)
+            {
+                _amount = coin + (coin * validatorRewRate[1] /100) ;
+            }
+            else if(coin >= 3e5 * 1e18)
+            {
+                _amount = coin + (coin * validatorRewRate[2] /100) ;
+            }
+            else if(coin >= 1e5 * 1e18)
+            {
+                _amount = coin + (coin * validatorRewRate[3] /100) ;
+            }
+            else if(coin >= 5e4 * 1e18)
+            {
+                _amount = coin + (coin * validatorRewRate[4] /100) ;
+            }
+            else if(coin >= 1e4 * 1e18)
+            {
+                _amount = coin + (coin * validatorRewRate[5] /100) ;
+            }
+            else if(coin >= 1000 * 1e18)
+            {
+                _amount = coin + (coin * validatorRewRate[6] /100) ;
+            }
+            else 
+            {
+                _amount = coin + (coin * validatorRewRate[7] /100) ;
+            }
+            if(details[_add].LastReward_time>0){
+                return  details[_add].pending_reward + (_amount * (block.timestamp - details[_add].LastReward_time) * rewardrate / (RewardInterval * 10000)) ;
+            }
+            else {
+                return 0;
+            }
+
+        }
+        else {
         return  details[_add].pending_reward + (details[_add].amount * (block.timestamp - details[_add].LastReward_time) * rewardrate / (RewardInterval * 10000)) ;
+        }
     }
 
 
@@ -201,6 +265,32 @@ contract Staking is ownable, ReentrancyGuard  {
 
      function setRewardrate(uint256 _rate) public onlyOwner returns(bool){
        rewardrate = _rate;
+       return true;
+     }
+
+     function setValidatorContract(IValidators _validatorcontract) public onlyOwner returns(bool){
+       validatorcontract = _validatorcontract;
+       return true;
+     }
+
+    function setValidatorStatus(address validator, bool _status) public onlyOwner returns(bool){
+       validatorStatus[validator] = _status;
+       return true;
+     }
+
+     function addValidators(address[] memory validators) public onlyOwner returns(bool){
+         require(validators.length<=20,"beyond max limit");
+         for(uint i=0;i<validators.length;i++){
+            if(details[validators[i]].LastReward_time ==0){
+                validatorStatus[validators[i]] = true;
+                details[validators[i]].LastReward_time = block.timestamp;
+            }
+         }
+       return true;
+     }
+
+    function updateValidatorRewRate(uint[8] memory _validatorRewRate) public onlyOwner returns(bool){
+       validatorRewRate = _validatorRewRate;
        return true;
      }
 

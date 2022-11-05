@@ -105,7 +105,7 @@ interface IValidators {
             address[] memory);
 }
 
-contract Staking is ownable, ReentrancyGuard  {
+contract StakeDex is ownable, ReentrancyGuard  {
 
 
     event Stake( address indexed user, uint256 indexed amount);
@@ -135,7 +135,7 @@ contract Staking is ownable, ReentrancyGuard  {
     }
     uint256 public OwnerDeposit;
     uint256 public rewardrate = 2000; //20%
-    uint public constant RewardInterval = 365;//365 days;
+    uint public constant RewardInterval = 365 days;
     mapping(address=>stake) public details;
     mapping(address=>bool) public validatorStatus;
     uint[8] public validatorRewRate = [250,200,180,160,110,90,75,50];
